@@ -292,6 +292,8 @@ While this prototype is intentionally limited, potential extensions could includ
 - **Query Optimization**: Caching layers and performance tuning
 - **Multi-user Support**: Authentication and authorization
 - **Real-time Updates**: Change data capture and streaming
+- **API Gateway for Auth**: Include API Gateway for secure access
+- **Role based Access*: Data can be accessed based on roles for security
 
 ## Technology Stack
 
