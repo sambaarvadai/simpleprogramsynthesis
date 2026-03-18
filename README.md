@@ -239,15 +239,46 @@ src/
 
 - `ANTHROPIC_API_KEY` - Your Anthropic API key (required)
 
-## Limitations
+## Extensibility
 
-This is intentionally a minimal prototype focused on security and reliability:
+This prototype provides a solid foundation that can be extended to support any database structure:
 
-- **Limited Scope**: Only supports customers and orders tables
-- **Fixed Schema**: Predefined database structure
-- **No Auth**: Single-user local only
-- **CLI Only**: No web interface or API
-- **Basic Error Handling**: Happy path focus for demonstration
+- **🔒 Configurable Schema**: Database tables defined in `src/config/schema.json` can be easily modified
+- **📊 Dynamic Table Support**: System automatically discovers and validates any tables defined in schema
+- **🔗 Flexible Relationships**: Foreign keys and joins can be added between any tables
+- **📝 Extensible Query Interface**: LLM automatically supports all tables and relationships defined in schema
+
+### Current Schema
+The default configuration includes customers and orders tables, but the architecture supports:
+- **Adding New Tables**: Simply add table definitions to `schema.json`
+- **Custom Fields**: Extend existing tables with new columns
+- **Multiple Relationships**: Define joins between any tables
+- **Any Database Backend**: Schema system works with any database structure
+
+### Example Extension
+To add a "products" table:
+```json
+{
+  "tables": {
+    "products": {
+      "fields": {
+        "id": {"type": "integer", "filterable": true, "selectable": true},
+        "name": {"type": "text", "filterable": true, "selectable": true},
+        "price": {"type": "real", "filterable": true, "selectable": true}
+      },
+      "primaryKey": "id"
+    }
+  },
+  "joins": {
+    "orders.products": {
+      "from": "orders.product_id", 
+      "to": "products.id"
+    }
+  }
+}
+```
+
+The system will automatically support the new tables for querying immediately after schema updates.
 
 ## Future Extensions
 
