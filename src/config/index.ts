@@ -18,6 +18,12 @@ export interface AppConfig {
   debug: boolean;
 }
 
+export interface PipelineConfig {
+  enabled: boolean;
+  maxCorrectionAttempts: number;
+  enableResponseReframing: boolean;
+}
+
 export interface SchemaConfig {
   tables: Record<string, any>;
   joins: Record<string, any>;
@@ -27,6 +33,7 @@ export interface Config {
   database: DatabaseConfig;
   llm: LLMConfig;
   app: AppConfig;
+  pipeline: PipelineConfig;
 }
 
 let config: Config | null = null;
@@ -93,6 +100,11 @@ function getDefaultConfig(): Config {
       name: 'NL2DB Prototype',
       maxQueryLimit: 20,
       debug: true
+    },
+    pipeline: {
+      enabled: false,
+      maxCorrectionAttempts: 3,
+      enableResponseReframing: true
     }
   };
 }

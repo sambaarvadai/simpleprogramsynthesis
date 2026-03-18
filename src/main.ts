@@ -2,8 +2,14 @@ import dotenv from 'dotenv';
 import { getDatabase } from './db/sqlite';
 import { interpretUserRequest } from './llm/interpret';
 import { executePlan } from './execution/run';
+import { AnyPlan, ExecutionResult, QueryResult } from './plans/types';
 import { formatResponse } from './response/format';
+import { reframeResponse } from './response/reframer';
 import { closeDatabase } from './db/sqlite';
+import { buildQueryPipeline } from './plans/queryPlan';
+import { AnthropicAdapter } from './plans/anthropicAdapter';
+import { getConfig } from './config';
+import { executeCompiledQuery } from './execution/executeCompiled';
 
 // Load environment variables
 dotenv.config();
@@ -14,6 +20,7 @@ async function main(): Promise<void> {
   
   try {
     // Connect to database (assumes database is already initialized)
+    
     console.log('� Connecting to database...');
     await getDatabase();
     console.log('✅ Database ready\n');
@@ -47,14 +54,49 @@ async function main(): Promise<void> {
         
         console.log('🔄 Processing...');
         
-        // Interpret user request
-        const plan = await interpretUserRequest(userInput);
+        const config = getConfig();
         
-        // Execute the plan
-        const result = await executePlan(plan);
+        // Choose execution path based on pipeline configuration
+        let result;
+        let pipelineResult = null;
+        if (config.pipeline.enabled) {
+          console.log('🔧 Using enhanced query pipeline with self-correction...');
+          const adapter = new AnthropicAdapter();
+          pipelineResult = await buildQueryPipeline(userInput, adapter);
+          
+          // Check if this is a conversational plan
+          if (pipelineResult.compiled.sql === '') {
+            result = { success: true, data: "I'm here to help you query the database. You can ask me about customers, orders, and perform various analyses." };
+          } else {
+            // Execute compiled query directly
+            result = await executeCompiledQuery(pipelineResult.compiled);
+          }
+        } else {
+          console.log('📝 Using standard query interpretation...');
+          // Interpret user request
+          const plan = await interpretUserRequest(userInput);
+          
+          // Execute the plan
+          result = await executePlan(plan);
+        }
         
         // Format and display response
-        const response = formatResponse(result);
+        let response = formatResponse(result);
+        
+        // Apply response reframing if enabled
+        if (config.pipeline.enableResponseReframing && result.success && result.data) {
+          try {
+            const sql = config.pipeline.enabled && pipelineResult ? 
+              pipelineResult.compiled.sql : 
+              (result.data as QueryResult).rows ? 'Query executed' : undefined;
+            
+            response = await reframeResponse(userInput, result.data, sql);
+          } catch (error) {
+            console.warn('Response reframing failed, using formatted response:', error);
+            // Keep original formatted response
+          }
+        }
+        
         console.log(`🤖: ${response}\n`);
         
       } catch (error) {

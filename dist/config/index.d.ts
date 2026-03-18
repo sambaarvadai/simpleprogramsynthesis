@@ -12,6 +12,11 @@ export interface AppConfig {
     maxQueryLimit: number;
     debug: boolean;
 }
+export interface PipelineConfig {
+    enabled: boolean;
+    maxCorrectionAttempts: number;
+    enableResponseReframing: boolean;
+}
 export interface SchemaConfig {
     tables: Record<string, any>;
     joins: Record<string, any>;
@@ -20,6 +25,7 @@ export interface Config {
     database: DatabaseConfig;
     llm: LLMConfig;
     app: AppConfig;
+    pipeline: PipelineConfig;
 }
 export declare function getConfig(): Config;
 export declare function getSchemaConfig(): SchemaConfig;

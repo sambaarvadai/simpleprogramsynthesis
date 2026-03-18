@@ -66,6 +66,11 @@ function getDefaultConfig() {
             name: 'NL2DB Prototype',
             maxQueryLimit: 20,
             debug: true
+        },
+        pipeline: {
+            enabled: false,
+            maxCorrectionAttempts: 3,
+            enableResponseReframing: true
         }
     };
 }

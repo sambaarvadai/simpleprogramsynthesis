@@ -8,7 +8,12 @@ const sqlite_1 = require("./db/sqlite");
 const interpret_1 = require("./llm/interpret");
 const run_1 = require("./execution/run");
 const format_1 = require("./response/format");
+const reframer_1 = require("./response/reframer");
 const sqlite_2 = require("./db/sqlite");
+const queryPlan_1 = require("./plans/queryPlan");
+const anthropicAdapter_1 = require("./plans/anthropicAdapter");
+const config_1 = require("./config");
+const executeCompiled_1 = require("./execution/executeCompiled");
 // Load environment variables
 dotenv_1.default.config();
 async function main() {
@@ -42,12 +47,45 @@ async function main() {
                     continue;
                 }
                 console.log('🔄 Processing...');
-                // Interpret user request
-                const plan = await (0, interpret_1.interpretUserRequest)(userInput);
-                // Execute the plan
-                const result = await (0, run_1.executePlan)(plan);
+                const config = (0, config_1.getConfig)();
+                // Choose execution path based on pipeline configuration
+                let result;
+                let pipelineResult = null;
+                if (config.pipeline.enabled) {
+                    console.log('🔧 Using enhanced query pipeline with self-correction...');
+                    const adapter = new anthropicAdapter_1.AnthropicAdapter();
+                    pipelineResult = await (0, queryPlan_1.buildQueryPipeline)(userInput, adapter);
+                    // Check if this is a conversational plan
+                    if (pipelineResult.compiled.sql === '') {
+                        result = { success: true, data: "I'm here to help you query the database. You can ask me about customers, orders, and perform various analyses." };
+                    }
+                    else {
+                        // Execute compiled query directly
+                        result = await (0, executeCompiled_1.executeCompiledQuery)(pipelineResult.compiled);
+                    }
+                }
+                else {
+                    console.log('📝 Using standard query interpretation...');
+                    // Interpret user request
+                    const plan = await (0, interpret_1.interpretUserRequest)(userInput);
+                    // Execute the plan
+                    result = await (0, run_1.executePlan)(plan);
+                }
                 // Format and display response
-                const response = (0, format_1.formatResponse)(result);
+                let response = (0, format_1.formatResponse)(result);
+                // Apply response reframing if enabled
+                if (config.pipeline.enableResponseReframing && result.success && result.data) {
+                    try {
+                        const sql = config.pipeline.enabled && pipelineResult ?
+                            pipelineResult.compiled.sql :
+                            result.data.rows ? 'Query executed' : undefined;
+                        response = await (0, reframer_1.reframeResponse)(userInput, result.data, sql);
+                    }
+                    catch (error) {
+                        console.warn('Response reframing failed, using formatted response:', error);
+                        // Keep original formatted response
+                    }
+                }
                 console.log(`🤖: ${response}\n`);
             }
             catch (error) {

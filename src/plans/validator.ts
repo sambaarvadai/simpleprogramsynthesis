@@ -113,11 +113,21 @@ function validateSelect(
     if (field.includes('*')) return;
 
     // Warn if field doesn't exist in schema (only when table is known)
-    if (tableSchema) {
-      const columnName = field.includes('.') ? field.split('.')[1] : field;
-      if (!tableSchema.fields?.[columnName]) {
-        issues.push(warning(`select[${i}]`, `Column "${field}" not found in table "${plan.entity}".`, `Available columns: ${Object.keys(tableSchema.fields ?? {}).join(', ')}`));
-      }
+    const availableColumns = getAllAvailableColumns(plan, schema);
+    
+    // Check if field is available (it could be fully qualified or unqualified)
+    let fieldFound = false;
+    if (field.includes('.')) {
+      // Fully qualified field like "orders.item"
+      fieldFound = !!availableColumns[field];
+    } else {
+      // Unqualified field like "item" - check if it exists in main table
+      const unqualifiedInMain = `${plan.entity}.${field}`;
+      fieldFound = !!availableColumns[unqualifiedInMain];
+    }
+    
+    if (!fieldFound) {
+      issues.push(warning(`select[${i}]`, `Column "${field}" not found in available tables.`, `Available columns: ${Object.keys(availableColumns).join(', ')}`));
     }
   });
 }
@@ -148,13 +158,22 @@ function validateWhereConditions(
     } else if (!isValidIdentifier(condition.field)) {
       issues.push(error(`${path}.field`, `Invalid field identifier: "${condition.field}".`));
     } else {
-      // Schema-aware column check
-      const tableSchema = schema.tables[plan.entity!];
-      if (tableSchema) {
-        const columnName = condition.field.includes('.') ? condition.field.split('.')[1] : condition.field;
-        if (!tableSchema.fields?.[columnName]) {
-          issues.push(warning(`${path}.field`, `Column "${condition.field}" not found in table "${plan.entity}".`, `Available columns: ${Object.keys(tableSchema.fields ?? {}).join(', ')}`));
-        }
+      // Schema-aware column check with joined tables
+      const availableColumns = getAllAvailableColumns(plan, schema);
+      
+      // Check if field is available (it could be fully qualified or unqualified)
+      let fieldFound = false;
+      if (condition.field.includes('.')) {
+        // Fully qualified field like "customers.name"
+        fieldFound = !!availableColumns[condition.field];
+      } else {
+        // Unqualified field like "name" - check if it exists in main table
+        const unqualifiedInMain = `${plan.entity}.${condition.field}`;
+        fieldFound = !!availableColumns[unqualifiedInMain];
+      }
+      
+      if (!fieldFound) {
+        issues.push(warning(`${path}.field`, `Column "${condition.field}" not found in available tables.`, `Available columns: ${Object.keys(availableColumns).join(', ')}`));
       }
     }
 
@@ -375,6 +394,40 @@ function buildLlmFeedback(issues: ValidationIssue[]): string {
   lines.push('Return ONLY the corrected JSON query plan with no explanation.');
 
   return lines.join('\n');
+}
+
+// ------------------------------------------------------------------
+// Helper functions
+// ------------------------------------------------------------------
+
+function getAllAvailableColumns(plan: QueryPlan, schema: ReturnType<typeof getSchemaMetadata>): Record<string, boolean> {
+  const available: Record<string, boolean> = {};
+  
+  // Add columns from main entity
+  const mainTable = schema.tables[plan.entity!];
+  if (mainTable) {
+    Object.keys(mainTable.fields).forEach(field => {
+      available[field] = true;
+    });
+  }
+  
+  // Add columns from joined tables
+  if (plan.join && plan.join.length > 0) {
+    plan.join.forEach(joinEntry => {
+      const joinTable = typeof joinEntry === 'string' ? joinEntry : joinEntry?.table;
+      const joinedTableSchema = schema.tables[joinTable];
+      if (joinedTableSchema) {
+        Object.keys(joinedTableSchema.fields).forEach(field => {
+          available[field] = true;
+        });
+      }
+    });
+  }
+  
+  // Debug logging
+  console.log(`[Validator] Available columns for ${plan.entity}:`, Object.keys(available));
+  
+  return available;
 }
 
 // ------------------------------------------------------------------
